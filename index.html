@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+<head>
+<script src="exif-js/exif.js"></script>
+<script>
+var to_dms = function(latitude, cardinal) {
+	var flip;
+	if (cardinal === "N" || cardinal === "E")
+		flip = 1;
+	else
+		flip = -1;
+
+	return (latitude[0] + latitude[1] / 60 + latitude[2] / (60*60)) * flip;
+}
+
+window.onload = function() {
+	var filesUpload = document.getElementById("files-upload"),
+		dropArea = document.getElementById("drop-area"),
+		fileList = document.getElementById("file-list");
+
+	function uploadFile (file) {
+		var li = document.createElement("li"),
+			div = document.createElement("div"),
+			img,
+			reader,
+			lat, lon,
+			fileInfo;
+
+		li.appendChild(div);
+
+		/*
+			If the file is an image and the web browser supports FileReader,
+			present a preview in the file list
+		*/
+		if (typeof FileReader !== "undefined" && (/image/i).test(file.type)) {
+			img = document.createElement("img");
+			li.appendChild(img);
+			binaryReader = new FileReader();
+			binaryReader.onloadend = function() {
+				var exif = EXIF.readFromBinaryFile(this.result);
+				console.log(exif["DateTime"]);
+				lat = to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]);
+				lon = to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]);
+			};
+			binaryReader.readAsArrayBuffer(file);
+			/*(function (theImg) {
+				return function (evt) {
+					theImg.src = evt.target.result;
+				};
+			}(img)); */
+//			reader.readAsDataURL(file);
+		}
+
+		// Present file info and append it to the list of files
+		fileInfo = "<div><strong>Name:</strong> " + file.name + "</div>";
+		fileInfo += "<div><strong>Size:</strong> " + parseInt(file.size / 1024, 10) + " kb</div>";
+		fileInfo += "<div><strong>Type:</strong> " + file.type + "</div>";
+		fileInfo += "<div>Location:" + lat + ", " + lon + "</div>";
+		div.innerHTML = fileInfo;
+
+		fileList.appendChild(li);
+	}
+
+	function traverseFiles (files) {
+		if (typeof files !== "undefined")
+			for (var i=0, l=files.length; i<l; i++)
+				uploadFile(files[i]);
+		else
+			fileList.innerHTML = "No support for the File API in this web browser";
+	}
+
+	filesUpload.addEventListener("change", function () {
+		traverseFiles(this.files);
+	}, false);
+
+	dropArea.addEventListener("dragleave", function (evt) {
+		var target = evt.target;
+
+		if (target && target === dropArea)
+			this.className = "";
+		evt.preventDefault();
+		evt.stopPropagation();
+	}, false);
+
+	dropArea.addEventListener("dragenter", function (evt) {
+		this.className = "over";
+		evt.preventDefault();
+		evt.stopPropagation();
+	}, false);
+
+	dropArea.addEventListener("dragover", function (evt) {
+		evt.preventDefault();
+		evt.stopPropagation();
+	}, false);
+
+	dropArea.addEventListener("drop", function (evt) {
+		traverseFiles(evt.dataTransfer.files);
+		this.className = "";
+		evt.preventDefault();
+		evt.stopPropagation();
+	}, false);
+}
+</script>
+<style>
+#drop-area	{ display: block; width: 25%; height: 25em; border: thick dashed gray; }
+</style>
+</head>
+<body>
+<h3>Choose file(s)</h3>
+<p>
+	<input id="files-upload" type="file" multiple>
+</p>
+<p id="drop-area">
+	<span class="drop-instructions">or drag and drop files here</span>
+	<span class="drop-over">Drop files here!</span>
+</p>
+
+<ul id="file-list">
+	<li class="no-items">(no files uploaded yet)</li>
+</ul>
+</body>
+</html>
