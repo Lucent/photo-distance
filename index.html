@@ -1,10 +1,16 @@
 <!doctype html>
 <html>
 <head>
+<script src="https://d3js.org/d3-array.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo.v1.min.js"></script>
+<script src="js-md5/src/md5.js"></script>
 <script src="exif-js/exif.js"></script>
 <script>
-var to_dms = function(latitude, cardinal) {
+function to_dms(latitude, cardinal) {
 	var flip;
+	if (!latitude)
+		return;
+
 	if (cardinal === "N" || cardinal === "E")
 		flip = 1;
 	else
@@ -12,6 +18,20 @@ var to_dms = function(latitude, cardinal) {
 
 	return (latitude[0] + latitude[1] / 60 + latitude[2] / (60*60)) * flip;
 }
+
+function get_alt(altitude, sign) {
+	let flip;
+	if (!altitude)
+		return;
+
+	if (sign === 1)
+		flip = -1;
+	else
+		flip = 1;
+	return altitude * flip;
+}
+
+var imageHash = new Map();
 
 window.onload = function() {
 	var filesUpload = document.getElementById("files-upload"),
@@ -38,17 +58,18 @@ window.onload = function() {
 			binaryReader = new FileReader();
 			binaryReader.onloadend = function() {
 				var exif = EXIF.readFromBinaryFile(this.result);
-				console.log(exif["DateTime"]);
-				lat = to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]);
-				lon = to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]);
+				var hash = md5(this.result);
+				imageHash.set(hash, {
+					"time": exif["DateTime"],
+					"lat": to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]),
+					"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
+					"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
+				});
 			};
 			binaryReader.readAsArrayBuffer(file);
-			/*(function (theImg) {
-				return function (evt) {
-					theImg.src = evt.target.result;
-				};
-			}(img)); */
-//			reader.readAsDataURL(file);
+			for (let [hash, image] of imageHash) {
+				console.log(image);
+			}
 		}
 
 		// Present file info and append it to the list of files
