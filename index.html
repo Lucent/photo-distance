@@ -6,6 +6,11 @@
 <script src="js-md5/src/md5.js"></script>
 <script src="exif-js/exif.js"></script>
 <script>
+function display_loaded(file, specs) {
+	console.log(file.name + " size " + file.size + " from " + file.lastModified);
+	console.log(specs);
+}
+
 function to_dms(latitude, cardinal) {
 	var flip;
 	if (!latitude)
@@ -20,15 +25,16 @@ function to_dms(latitude, cardinal) {
 }
 
 function get_alt(altitude, sign) {
-	let flip;
 	if (!altitude)
 		return;
 
-	if (sign === 1)
-		flip = -1;
-	else
-		flip = 1;
-	return altitude * flip;
+	return altitude * (sign ? -1 : 1);
+}
+
+function batch_uploaded() {
+	for (const [hash, specs] of imageHash) {
+		console.log(specs);
+	}
 }
 
 var imageHash = new Map();
@@ -41,10 +47,7 @@ window.onload = function() {
 	function uploadFile (file) {
 		var li = document.createElement("li"),
 			div = document.createElement("div"),
-			img,
-			reader,
-			lat, lon,
-			fileInfo;
+			img;
 
 		li.appendChild(div);
 
@@ -59,34 +62,29 @@ window.onload = function() {
 			binaryReader.onloadend = function() {
 				var exif = EXIF.readFromBinaryFile(this.result);
 				var hash = md5(this.result);
-				imageHash.set(hash, {
-					"time": exif["DateTime"],
-					"lat": to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]),
-					"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
-					"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
-				});
+				if (!imageHash.has(hash)) {
+					let specs = {
+						"time": exif["DateTime"],
+						"lat": to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]),
+						"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
+						"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
+					};
+					imageHash.set(hash, specs);
+//					display_loaded(file, specs);
+				}
 			};
 			binaryReader.readAsArrayBuffer(file);
-			for (let [hash, image] of imageHash) {
-				console.log(image);
-			}
 		}
-
-		// Present file info and append it to the list of files
-		fileInfo = "<div><strong>Name:</strong> " + file.name + "</div>";
-		fileInfo += "<div><strong>Size:</strong> " + parseInt(file.size / 1024, 10) + " kb</div>";
-		fileInfo += "<div><strong>Type:</strong> " + file.type + "</div>";
-		fileInfo += "<div>Location:" + lat + ", " + lon + "</div>";
-		div.innerHTML = fileInfo;
 
 		fileList.appendChild(li);
 	}
 
-	function traverseFiles (files) {
-		if (typeof files !== "undefined")
+	function traverseFiles(files) {
+		if (typeof files !== "undefined") {
 			for (var i=0, l=files.length; i<l; i++)
 				uploadFile(files[i]);
-		else
+			batch_uploaded();
+		} else
 			fileList.innerHTML = "No support for the File API in this web browser";
 	}
 
