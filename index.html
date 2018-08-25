@@ -33,12 +33,17 @@ function get_alt(altitude, sign) {
 }
 
 function batch_uploaded() {
-	for (const [hash1, specs1] of image_hash) {
+	const image_array = Array.from(image_hash);
+
+	for (let pointer = 0; pointer < image_array.length; pointer++) {
+		let hash1 = image_array[pointer][0];
+		let specs1 = image_array[pointer][1];
 		if (!specs1.lat || !specs1.lon) continue;
 
-		for (const [hash2, specs2] of image_hash) {
+		for (let inner = pointer + 1; inner < image_array.length; inner++) {
+			let hash2 = image_array[inner][0];
+			let specs2 = image_array[inner][1];
 			if (!specs2.lat || !specs2.lon) continue;
-			if (hash1 === hash2) continue;
 
 			let key = hash_pair_to_key(hash1, hash2);
 			let dist = distance_haversine(specs1.lat, specs1.lon, specs2.lat, specs2.lon);
@@ -46,12 +51,13 @@ function batch_uploaded() {
 		}
 	}
 
+	console.log(distance_grid);
 	let distance_array = Array.from(distance_grid);
 	distance_array = distance_array.sort(distance_sort);
 	const distance_map = new Map(distance_array);
 
 	for (const [hash, dist] of distance_map) {
-		console.log(dist);
+//		console.log(dist);
 	}
 }
 
