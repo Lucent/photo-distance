@@ -1,8 +1,8 @@
 <!doctype html>
 <html>
-<head>
+<head><!--
 <script src="https://d3js.org/d3-array.v1.min.js"></script>
-<script src="https://d3js.org/d3-geo.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo.v1.min.js"></script>-->
 <script src="js-md5/src/md5.js"></script>
 <script src="exif-js/exif.js"></script>
 <script>
@@ -33,13 +33,35 @@ function get_alt(altitude, sign) {
 }
 
 function batch_uploaded() {
-	const home_lat = 35.957866;
-	const home_lon = -83.933953;
-	console.log(image_hash);
-	for (const [hash, specs] of image_hash) {
-		if (specs.lat && specs.lon)
-			console.log(distance_haversine(home_lat, home_lon, specs.lat, specs.lon) / 1609);
+	for (const [hash1, specs1] of image_hash) {
+		if (!specs1.lat || !specs1.lon) continue;
+
+		for (const [hash2, specs2] of image_hash) {
+			if (!specs2.lat || !specs2.lon) continue;
+			if (hash1 === hash2) continue;
+
+			let key = hash_pair_to_key(hash1, hash2);
+			let dist = distance_haversine(specs1.lat, specs1.lon, specs2.lat, specs2.lon);
+			distance_grid.set(key, dist);
+		}
 	}
+
+	let distance_array = Array.from(distance_grid);
+	distance_array = distance_array.sort(distance_sort);
+	const distance_map = new Map(distance_array);
+
+	for (const [hash, dist] of distance_map) {
+		console.log(dist);
+	}
+}
+
+function distance_sort(a, b) {
+	return a[1] - b[1];
+}
+
+function hash_pair_to_key(hash1, hash2) {
+	const sorted = [hash1, hash2].sort();
+	return JSON.stringify(sorted);
 }
 
 Number.prototype.toRadians = function() { return this * Math.PI / 180; };
@@ -60,7 +82,7 @@ function distance_haversine(lat1, lon1, lat2, lon2) {
 }
 
 const image_hash = new Map();
-const distance_grid = {};
+const distance_grid = new Map();
 
 const read_uploaded_file = (file) => {
 	if (!FileReader || !(/image/i).test(file.type))
@@ -81,11 +103,13 @@ const read_uploaded_file = (file) => {
 			const hash = md5(first_64);
 			if (!image_hash.has(hash)) {
 				const specs = {
+					"name": file.name,
 					"time": exif["DateTime"],
 					"lat": to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]),
 					"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
 					"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
 				};
+			//	console.log(specs);
 				image_hash.set(hash, specs);
 			}
 			resolve();
@@ -94,17 +118,17 @@ const read_uploaded_file = (file) => {
 	});
 };
 
+function traverseFiles(files) {
+	if (typeof files !== "undefined") {
+		const file_array = Array.from(files);
+		Promise.all(file_array.map(file => read_uploaded_file(file))).then(batch_uploaded);
+	}
+}
+
 window.onload = function() {
 	var filesUpload = document.getElementById("files-upload"),
 		dropArea = document.getElementById("drop-area"),
 		fileList = document.getElementById("file-list");
-
-	function traverseFiles(files) {
-		if (typeof files !== "undefined") {
-			const file_array = Array.from(files);
-			Promise.all(file_array.map(file => read_uploaded_file(file))).then(batch_uploaded);
-		}
-	}
 
 	filesUpload.addEventListener("change", function () {
 		traverseFiles(this.files);
@@ -143,7 +167,7 @@ window.onload = function() {
 </style>
 </head>
 <body>
-<h3>Choose file(s)</h3>
+<h1>Choose file(s)</h1>
 <p>
 	<input id="files-upload" type="file" multiple>
 </p>
