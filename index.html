@@ -6,6 +6,7 @@
 <script src="js-md5/src/md5.js"></script>
 <script src="exif-js/exif.js"></script>
 <script>
+"use strict";
 function display_loaded(file, specs) {
 	console.log(file.name + " size " + file.size + " from " + file.lastModified);
 	console.log(specs);
@@ -32,10 +33,10 @@ function get_alt(altitude, sign) {
 }
 
 function batch_uploaded() {
-	var home_lat = 35.957866;
-	var home_lon = -83.933953;
-	console.log(imageHash);
-	for (const [hash, specs] of imageHash) {
+	const home_lat = 35.957866;
+	const home_lon = -83.933953;
+	console.log(image_hash);
+	for (const [hash, specs] of image_hash) {
 		if (specs.lat && specs.lon)
 			console.log(distance_haversine(home_lat, home_lon, specs.lat, specs.lon) / 1609);
 	}
@@ -44,70 +45,65 @@ function batch_uploaded() {
 Number.prototype.toRadians = function() { return this * Math.PI / 180; };
 
 function distance_haversine(lat1, lon1, lat2, lon2) {
-	var R = 6371e3; // metres
-	var X1 = lat1.toRadians();
-	var X2 = lat2.toRadians();
-	var dX = (lat2-lat1).toRadians();
-	var dy = (lon2-lon1).toRadians();
+	const R = 6371e3; // metres
+	const X1 = lat1.toRadians();
+	const X2 = lat2.toRadians();
+	const dX = (lat2-lat1).toRadians();
+	const dy = (lon2-lon1).toRadians();
 
-	var a = Math.sin(dX/2) * Math.sin(dX/2) +
+	const a = Math.sin(dX/2) * Math.sin(dX/2) +
 			Math.cos(X1) * Math.cos(X2) * Math.sin(dy/2) * Math.sin(dy/2);
-	var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-	var d = R * c;
+	const d = R * c;
 	return d;
 }
 
-var imageHash = new Map();
+const image_hash = new Map();
+const distance_grid = {};
+
+const read_uploaded_file = (file) => {
+	if (!FileReader || !(/image/i).test(file.type))
+		return;
+
+	const binaryReader = new FileReader();
+
+	return new Promise((resolve, reject) => {
+		binaryReader.onerror = () => {
+			binaryReader.abort();
+			reject(new DOMException("Problem parsing input file."));
+		};
+
+		binaryReader.onloadend = () => {
+//			const textenc = new TextDecoder();
+			const first_64 = binaryReader.result.slice(0, 2**16 - 1 + 100);
+			const exif = EXIF.readFromBinaryFile(first_64);
+			const hash = md5(first_64);
+			if (!image_hash.has(hash)) {
+				const specs = {
+					"time": exif["DateTime"],
+					"lat": to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]),
+					"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
+					"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
+				};
+				image_hash.set(hash, specs);
+			}
+			resolve();
+		};
+		binaryReader.readAsArrayBuffer(file);
+	});
+};
 
 window.onload = function() {
 	var filesUpload = document.getElementById("files-upload"),
 		dropArea = document.getElementById("drop-area"),
 		fileList = document.getElementById("file-list");
 
-	function uploadFile (file) {
-		var li = document.createElement("li"),
-			div = document.createElement("div"),
-			img;
-
-		li.appendChild(div);
-
-		/*
-			If the file is an image and the web browser supports FileReader,
-			present a preview in the file list
-		*/
-		if (typeof FileReader !== "undefined" && (/image/i).test(file.type)) {
-			img = document.createElement("img");
-			li.appendChild(img);
-			binaryReader = new FileReader();
-			binaryReader.onloadend = function() {
-				var first_64 = this.result.slice(0, 2**16 - 1 + 100);
-				var exif = EXIF.readFromBinaryFile(first_64);
-				var hash = md5(first_64);
-				if (!imageHash.has(hash)) {
-					let specs = {
-						"time": exif["DateTime"],
-						"lat": to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]),
-						"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
-						"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
-					};
-					imageHash.set(hash, specs);
-//					display_loaded(file, specs);
-				}
-			};
-			binaryReader.readAsArrayBuffer(file);
-		}
-
-		fileList.appendChild(li);
-	}
-
 	function traverseFiles(files) {
 		if (typeof files !== "undefined") {
-			for (var i=0, l=files.length; i<l; i++)
-				uploadFile(files[i]);
-			batch_uploaded();
-		} else
-			fileList.innerHTML = "No support for the File API in this web browser";
+			const file_array = Array.from(files);
+			Promise.all(file_array.map(file => read_uploaded_file(file))).then(batch_uploaded);
+		}
 	}
 
 	filesUpload.addEventListener("change", function () {
