@@ -32,9 +32,30 @@ function get_alt(altitude, sign) {
 }
 
 function batch_uploaded() {
+	var home_lat = 35.957866;
+	var home_lon = -83.933953;
+	console.log(imageHash);
 	for (const [hash, specs] of imageHash) {
-		console.log(specs);
+		if (specs.lat && specs.lon)
+			console.log(distance_haversine(home_lat, home_lon, specs.lat, specs.lon) / 1609);
 	}
+}
+
+Number.prototype.toRadians = function() { return this * Math.PI / 180; };
+
+function distance_haversine(lat1, lon1, lat2, lon2) {
+	var R = 6371e3; // metres
+	var X1 = lat1.toRadians();
+	var X2 = lat2.toRadians();
+	var dX = (lat2-lat1).toRadians();
+	var dy = (lon2-lon1).toRadians();
+
+	var a = Math.sin(dX/2) * Math.sin(dX/2) +
+			Math.cos(X1) * Math.cos(X2) * Math.sin(dy/2) * Math.sin(dy/2);
+	var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+	var d = R * c;
+	return d;
 }
 
 var imageHash = new Map();
@@ -60,8 +81,9 @@ window.onload = function() {
 			li.appendChild(img);
 			binaryReader = new FileReader();
 			binaryReader.onloadend = function() {
-				var exif = EXIF.readFromBinaryFile(this.result);
-				var hash = md5(this.result);
+				var first_64 = this.result.slice(0, 2**16 - 1 + 100);
+				var exif = EXIF.readFromBinaryFile(first_64);
+				var hash = md5(first_64);
 				if (!imageHash.has(hash)) {
 					let specs = {
 						"time": exif["DateTime"],
