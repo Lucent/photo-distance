@@ -7,10 +7,6 @@
 <script src="exif-js/exif.js"></script>
 <script>
 "use strict";
-function display_loaded(file, specs) {
-	console.log(file.name + " size " + file.size + " from " + file.lastModified);
-	console.log(specs);
-}
 
 function to_dms(latitude, cardinal) {
 	var flip;
@@ -33,16 +29,10 @@ function get_alt(altitude, sign) {
 }
 
 function batch_uploaded() {
-	const image_array = Array.from(image_hash);
-
-	for (let pointer = 0; pointer < image_array.length; pointer++) {
-		let hash1 = image_array[pointer][0];
-		let specs1 = image_array[pointer][1];
+	for (const [hash1, specs1] of image_hash["1"]) {
 		if (!specs1.lat || !specs1.lon) continue;
 
-		for (let inner = pointer + 1; inner < image_array.length; inner++) {
-			let hash2 = image_array[inner][0];
-			let specs2 = image_array[inner][1];
+		for (const [hash2, specs2] of image_hash["2"]) {
 			if (!specs2.lat || !specs2.lon) continue;
 
 			let key = hash_pair_to_key(hash1, hash2);
@@ -51,13 +41,14 @@ function batch_uploaded() {
 		}
 	}
 
-	console.log(distance_grid);
-	let distance_array = Array.from(distance_grid);
-	distance_array = distance_array.sort(distance_sort);
-	const distance_map = new Map(distance_array);
+	let distance_array = Array.from(distance_grid).sort(distance_sort);
 
-	for (const [hash, dist] of distance_map) {
-//		console.log(dist);
+	if (distance_array.length) {
+		let closest = distance_array[0];
+		let pair = JSON.parse(closest[0]);
+		console.log(image_hash["1"].get(pair[0]));
+		console.log(" and ");
+		console.log(image_hash["2"].get(pair[1]));
 	}
 }
 
@@ -66,8 +57,7 @@ function distance_sort(a, b) {
 }
 
 function hash_pair_to_key(hash1, hash2) {
-	const sorted = [hash1, hash2].sort();
-	return JSON.stringify(sorted);
+	return JSON.stringify([hash1, hash2]);
 }
 
 Number.prototype.toRadians = function() { return this * Math.PI / 180; };
@@ -87,10 +77,13 @@ function distance_haversine(lat1, lon1, lat2, lon2) {
 	return d;
 }
 
-const image_hash = new Map();
+const image_hash = {
+	"1": new Map(),
+	"2": new Map()
+};
 const distance_grid = new Map();
 
-const read_uploaded_file = (file) => {
+const read_uploaded_file = (file, id) => {
 	if (!FileReader || !(/image/i).test(file.type))
 		return;
 
@@ -107,7 +100,7 @@ const read_uploaded_file = (file) => {
 			const first_64 = binaryReader.result.slice(0, 2**16 - 1 + 100);
 			const exif = EXIF.readFromBinaryFile(first_64);
 			const hash = md5(first_64);
-			if (!image_hash.has(hash)) {
+			if (!image_hash[id].has(hash)) {
 				const specs = {
 					"name": file.name,
 					"time": exif["DateTime"],
@@ -115,8 +108,12 @@ const read_uploaded_file = (file) => {
 					"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
 					"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
 				};
-			//	console.log(specs);
-				image_hash.set(hash, specs);
+				image_hash[id].set(hash, specs);
+
+				const ul = document.getElementById("file-list");
+				const li = document.createElement("li")
+				li.textContent = file.name + ": " + specs.lat + ", " + specs.lon;
+				ul.appendChild(li);
 			}
 			resolve();
 		};
@@ -124,52 +121,57 @@ const read_uploaded_file = (file) => {
 	});
 };
 
-function traverseFiles(files) {
-	if (typeof files !== "undefined") {
-		const file_array = Array.from(files);
-		Promise.all(file_array.map(file => read_uploaded_file(file))).then(batch_uploaded);
-	}
+function traverseFiles(files, id) {
+	if (!files) return;
+
+	const file_array = Array.from(files);
+	Promise.all(file_array.map(file => read_uploaded_file(file, id)))
+		.then(batch_uploaded);
 }
 
 window.onload = function() {
-	var filesUpload = document.getElementById("files-upload"),
-		dropArea = document.getElementById("drop-area"),
-		fileList = document.getElementById("file-list");
+	const dropArea = [...document.getElementsByClassName("drop-area")];
 
-	filesUpload.addEventListener("change", function () {
-		traverseFiles(this.files);
+	document.getElementById("files-upload").addEventListener("change", function () {
+		traverseFiles(this.files, this.id);
 	}, false);
 
-	dropArea.addEventListener("dragleave", function (evt) {
-		var target = evt.target;
-
-		if (target && target === dropArea)
+	dropArea.forEach(input =>
+		input.addEventListener("dragleave", function (evt) {
+			var target = evt.target;
 			this.className = "";
-		evt.preventDefault();
-		evt.stopPropagation();
-	}, false);
+			evt.preventDefault();
+			evt.stopPropagation();
+		}, false)
+	);
 
-	dropArea.addEventListener("dragenter", function (evt) {
-		this.className = "over";
-		evt.preventDefault();
-		evt.stopPropagation();
-	}, false);
+	dropArea.forEach(input =>
+		input.addEventListener("dragenter", function (evt) {
+			this.className = "over";
+			evt.preventDefault();
+			evt.stopPropagation();
+		}, false)
+	);
 
-	dropArea.addEventListener("dragover", function (evt) {
-		evt.preventDefault();
-		evt.stopPropagation();
-	}, false);
+	dropArea.forEach(input =>
+		input.addEventListener("dragover", function (evt) {
+			evt.preventDefault();
+			evt.stopPropagation();
+		}, false)
+	);
 
-	dropArea.addEventListener("drop", function (evt) {
-		traverseFiles(evt.dataTransfer.files);
-		this.className = "";
-		evt.preventDefault();
-		evt.stopPropagation();
-	}, false);
+	dropArea.forEach(input =>
+		input.addEventListener("drop", function (evt) {
+			traverseFiles(evt.dataTransfer.files, this.id);
+			this.className = "";
+			evt.preventDefault();
+			evt.stopPropagation();
+		}, false)
+	);
 }
 </script>
 <style>
-#drop-area	{ display: block; width: 25%; height: 25em; border: thick dashed gray; }
+div		{ display: inline-block; height: 50vh; width: 40%; border: thick dashed gray; box-sizing: border-box; margin: 1em; }
 </style>
 </head>
 <body>
@@ -177,13 +179,10 @@ window.onload = function() {
 <p>
 	<input id="files-upload" type="file" multiple>
 </p>
-<p id="drop-area">
-	<span class="drop-instructions">or drag and drop files here</span>
-	<span class="drop-over">Drop files here!</span>
-</p>
+<div class="drop-area" id="1" placeholder="Drag files here"></div>
+<div class="drop-area" id="2" placeholder="Drag files here"></div>
 
 <ul id="file-list">
-	<li class="no-items">(no files uploaded yet)</li>
 </ul>
 </body>
 </html>
