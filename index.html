@@ -30,13 +30,13 @@ function get_alt(altitude, sign) {
 
 function batch_uploaded() {
 	for (const [hash1, specs1] of image_hash["1"]) {
-		if (!specs1.lat || !specs1.lon) continue;
+		if (!specs1.lat || !specs1.lon || !specs1.date) continue;
 
 		for (const [hash2, specs2] of image_hash["2"]) {
-			if (!specs2.lat || !specs2.lon) continue;
+			if (!specs2.lat || !specs2.lon || !specs1.date) continue;
 
 			let key = hash_pair_to_key(hash1, hash2);
-			let dist = distance_haversine(specs1.lat, specs1.lon, specs2.lat, specs2.lon);
+			let dist = distance_spacetime(specs1.lat, specs1.lon, specs1.date, specs2.lat, specs2.lon, specs2.date);
 			distance_grid.set(key, dist);
 		}
 	}
@@ -46,9 +46,7 @@ function batch_uploaded() {
 	if (distance_array.length) {
 		let closest = distance_array[0];
 		let pair = JSON.parse(closest[0]);
-		console.log(image_hash["1"].get(pair[0]));
-		console.log(" and ");
-		console.log(image_hash["2"].get(pair[1]));
+		console.log(image_hash["1"].get(pair[0]).name + " and " + image_hash["2"].get(pair[1]).name);
 	}
 }
 
@@ -60,7 +58,27 @@ function hash_pair_to_key(hash1, hash2) {
 	return JSON.stringify([hash1, hash2]);
 }
 
+function parse_date(date_string) {
+	const b = date_string.split(/\D/);
+	return new Date(b[0],b[1]-1,b[2],b[3],b[4],b[5]);
+}
+
 Number.prototype.toRadians = function() { return this * Math.PI / 180; };
+
+function distance_spacetime(lat1, lon1, date1, lat2, lon2, date2) {
+	const DAYS_TO_METERS = 1609;
+	const DAY_MS = 24 * 60 * 60 * 1000;
+	const dist_space = distance_haversine(lat1, lon1, lat2, lon2);
+
+	const time1 = parse_date(date1 + " 0:0:0");
+	const time2 = parse_date(date2 + " 0:0:0");
+
+	const time_diff = Math.abs(time1 - time2);
+	const days_diff = time_diff / DAY_MS * DAYS_TO_METERS;
+
+	const dist_spacetime = Math.sqrt(days_diff**2 + dist_space**2);
+	return dist_spacetime;
+}
 
 function distance_haversine(lat1, lon1, lat2, lon2) {
 	const R = 6371e3; // metres
@@ -103,7 +121,8 @@ const read_uploaded_file = (file, id) => {
 			if (!image_hash[id].has(hash)) {
 				const specs = {
 					"name": file.name,
-					"time": exif["DateTime"],
+					//"time": exif["GPSDateStamp"] ? [exif["GPSDateStamp"] + " " + exif["GPSTimeStamp"], true] : [exif["DateTime"],
+					"date": exif["GPSDateStamp"] || exif["DateTime"].split(" ")[0],
 					"lat": to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]),
 					"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
 					"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
