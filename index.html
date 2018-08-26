@@ -8,6 +8,28 @@
 <script>
 "use strict";
 
+function show_thumbnail(sliced, hash, target) {
+	var array = new Uint8Array(sliced), start, end;
+	for (var i = 2; i < array.length; i++)
+		if (array[i] === 0xFF)
+			if (!start) {
+				if (array[i + 1] === 0xD8)
+					 start = i;
+			} else if (array[i + 1] === 0xD9) {
+				end = i;
+				break;
+			}
+
+	if (start && end) {
+		var urlCreator = window.URL || window.webkitURL;
+		var imageUrl = urlCreator.createObjectURL(new Blob([array.subarray(start, end)], {type:"image/jpeg"}));
+		var imgf = new Image();
+		imgf.src = imageUrl;
+		imgf.id = hash;
+		document.getElementById(target).appendChild(imgf);
+	}
+}
+
 function to_dms(latitude, cardinal) {
 	var flip;
 	if (!latitude)
@@ -46,7 +68,10 @@ function batch_uploaded() {
 	if (distance_array.length) {
 		let closest = distance_array[0];
 		let pair = JSON.parse(closest[0]);
-		console.log(image_hash["1"].get(pair[0]).name + " and " + image_hash["2"].get(pair[1]).name);
+		let first = document.getElementById(pair[0]);
+		let second = document.getElementById(pair[1]);
+		document.getElementById("Result").appendChild(first);
+		document.getElementById("Result").appendChild(second);
 	}
 }
 
@@ -114,10 +139,10 @@ const read_uploaded_file = (file, id) => {
 		};
 
 		binaryReader.onloadend = () => {
-//			const textenc = new TextDecoder();
 			const first_64 = binaryReader.result.slice(0, 2**16 - 1 + 100);
 			const exif = EXIF.readFromBinaryFile(first_64);
 			const hash = md5(first_64);
+			show_thumbnail(first_64, hash, id);
 			if (!image_hash[id].has(hash)) {
 				const specs = {
 					"name": file.name,
@@ -149,7 +174,7 @@ function traverseFiles(files, id) {
 }
 
 window.onload = function() {
-	const dropArea = [...document.getElementsByClassName("drop-area")];
+	const dropArea = [document.getElementById("1"), document.getElementById("2")];
 
 	document.getElementById("files-upload").addEventListener("change", function () {
 		traverseFiles(this.files, this.id);
@@ -190,7 +215,10 @@ window.onload = function() {
 }
 </script>
 <style>
-div		{ display: inline-block; height: 50vh; width: 40%; border: thick dashed gray; box-sizing: border-box; margin: 1em; }
+div img	{ margin: 0.25em; width: 100px; }
+div		{ display: inline-block; width: 45vw; min-height: 10vh; border: thick dashed gray; box-sizing: border-box; margin: 1em; }
+#Result	{ border: thick solid blue; width: 650px; display: block; margin: auto; }
+#Result img	{ width: 300px; }
 </style>
 </head>
 <body>
@@ -200,6 +228,9 @@ div		{ display: inline-block; height: 50vh; width: 40%; border: thick dashed gra
 </p>
 <div class="drop-area" id="1" placeholder="Drag files here"></div>
 <div class="drop-area" id="2" placeholder="Drag files here"></div>
+
+<div id="Result">
+</div>
 
 <ul id="file-list">
 </ul>
