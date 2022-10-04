@@ -27,19 +27,19 @@ function to_dms(latitude, cardinal) {
 	if (!latitude)
 		return;
 
-	if (cardinal === "N" || cardinal === "E")
+	if (cardinal === "North latitude" || cardinal === "East longitude")
 		flip = 1;
 	else
 		flip = -1;
 
-	return (latitude[0] + latitude[1] / 60 + latitude[2] / (60*60)) * flip;
+	return latitude * flip;
 }
 
 function get_alt(altitude, sign) {
 	if (!altitude)
 		return;
 
-	return altitude * (sign ? -1 : 1);
+	return parseFloat(altitude) * (sign ? -1 : 1);
 }
 
 function batch_uploaded() {
@@ -119,8 +119,9 @@ const image_hash = {
 const distance_grid = new Map();
 
 const read_uploaded_file = (file, id) => {
-	if (!FileReader || !(/image/i).test(file.type))
-		return;
+//	console.log(file);
+//	if (!FileReader || !(/image/i).test(file.type))
+//		return;
 
 	const binaryReader = new FileReader();
 
@@ -132,17 +133,18 @@ const read_uploaded_file = (file, id) => {
 
 		binaryReader.onloadend = () => {
 			const first_64 = binaryReader.result.slice(0, 2**16 - 1 + 100);
-			const exif = EXIF.readFromBinaryFile(first_64);
+//			const exif = ExifReader.load(first_64);
+			const exif = ExifReader.load(binaryReader.result);
 			const hash = md5(first_64);
 			show_thumbnail(first_64, hash, id);
 			if (!image_hash[id].has(hash)) {
 				const specs = {
 					"name": file.name,
 					//"time": exif["GPSDateStamp"] ? [exif["GPSDateStamp"] + " " + exif["GPSTimeStamp"], true] : [exif["DateTime"],
-					"date": exif["GPSDateStamp"] || exif["DateTime"].split(" ")[0],
-					"lat": to_dms(exif["GPSLatitude"], exif["GPSLatitudeRef"]),
-					"lon": to_dms(exif["GPSLongitude"], exif["GPSLongitudeRef"]),
-					"alt": get_alt(exif["GPSAltitude"], exif["GPSAltitudeRef"])
+					"date": exif["GPSDateStamp"]?.description || exif["DateTime"]?.description,
+					"lat": to_dms(exif["GPSLatitude"]?.description, exif["GPSLatitudeRef"]?.description),
+					"lon": to_dms(exif["GPSLongitude"]?.description, exif["GPSLongitudeRef"]?.description),
+					"alt": get_alt(exif["GPSAltitude"]?.description, exif["GPSAltitudeRef"]?.value)
 				};
 				image_hash[id].set(hash, specs);
 

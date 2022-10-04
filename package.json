@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "exifreader": "^4.6.0",
+    "js-md5": "^0.7.3"
+  }
+}
